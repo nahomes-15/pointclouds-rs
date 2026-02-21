@@ -31,6 +31,14 @@ path = "../tests/test_roundtrip_io.rs"
 name = "test_adversarial"
 path = "../tests/test_adversarial.rs"
 
+[[test]]
+name = "real_world_pipeline"
+path = "../tests/real_world_pipeline.rs"
+
+[[test]]
+name = "cluster_differential"
+path = "../tests/cluster_differential.rs"
+
 [lib]
 path = "src/lib.rs"
 

@@ -10,7 +10,7 @@ pub fn radius_outlier_removal(cloud: &PointCloud, radius: f32, min_neighbors: us
     let keep: Vec<usize> = (0..cloud.len())
         .filter(|&i| {
             let q = [cloud.x[i], cloud.y[i], cloud.z[i]];
-            tree.radius_search(&q, radius).len() >= min_neighbors
+            tree.radius_search_unsorted(&q, radius).len() >= min_neighbors
         })
         .collect();
 
