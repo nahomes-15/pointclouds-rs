@@ -1,136 +1,126 @@
 # pointclouds-rs
 
-**The Polars of Point Clouds.**
+Rust library for 3D point cloud processing, with Python bindings via PyO3.
 
-`pointclouds-rs` is a high-performance Rust-native point cloud processing library
-with first-class Python bindings. It targets **>=3x speedup over Open3D** on
-representative workloads, using an SoA-first data model, f32 pipelines, and
-efficient NumPy interop.
+Designed around an SoA (Structure-of-Arrays) data model where coordinates live in
+separate contiguous `Vec<f32>` arrays. This matches how LiDAR and depth sensors
+actually produce data, avoids AoS padding overhead, and keeps the door open for
+SIMD. All computation is f32 — sufficient for mm-scale accuracy and half the
+memory bandwidth of f64.
 
-## Features
+The library is split into small, focused crates with a clear dependency graph:
+`core` defines the `PointCloud` struct, `spatial` wraps a KD-tree, and everything
+else (`filters`, `normals`, `registration`, `segmentation`, `io`) depends only on
+what it needs. The Python package exposes the full API as `pointclouds_rs`.
 
-- **SoA data model** — cache-friendly, SIMD-ready layout (`x`, `y`, `z` as separate `Vec<f32>`)
-- **f32-first** — aligned with real sensor output (LiDAR, depth cameras)
-- **NumPy interop** — `PointCloud.from_numpy()` / `.to_numpy()` with automatic f64→f32 coercion
-- **Batteries included** — filters, normals, ICP registration, segmentation, multi-format I/O
-- **Safe Rust** — `#![forbid(unsafe_code)]` on all crates
-- **Cross-platform wheels** — `pip install pointclouds-rs` on Linux, macOS, Windows
+## Performance
 
-## Quickstart (Python)
+Measured on Apple M4 Max, release build. These are real outputs from the included
+demo scripts, not synthetic microbenchmarks:
+
+**KITTI obstacle detection** — 68K synthetic LiDAR points through voxel downsample,
+statistical outlier removal, RANSAC ground plane, and Euclidean clustering:
+162 ms total, finds 2 cars and 1 pedestrian.
+
+**Aerial LiDAR** — 241K points through voxel downsample, normal estimation,
+RANSAC ground extraction, and clustering: 87 ms total (~2.8M pts/sec throughput).
+
+SOR dominates the KITTI pipeline at 153 ms (per-point KNN is expensive). Clustering
+uses grid spatial hashing + union-find and runs in 17 ms on 161K non-ground points.
+Full Criterion microbenchmark data is in [BENCHMARKS.md](BENCHMARKS.md).
+
+## Usage
+
+### Python
+
+```bash
+pip install pointclouds-rs
+```
 
 ```python
 import numpy as np
 import pointclouds_rs as pcr
 
-# Create from NumPy (zero-copy for contiguous f32)
-points = np.random.rand(100_000, 3).astype(np.float32)
-cloud = pcr.PointCloud.from_numpy(points)
+# NumPy in, PointCloud out (f64 arrays are coerced to f32 automatically)
+cloud = pcr.PointCloud.from_numpy(np.random.rand(100_000, 3).astype(np.float32))
 
-# Voxel downsample
+# Downsample, filter, fit a ground plane, then cluster the obstacles
 ds = pcr.voxel_downsample(cloud, voxel_size=0.05)
-print(f"Downsampled: {cloud.len()} → {ds.len()} points")
+clean = pcr.statistical_outlier_removal(ds, k=10, std_multiplier=1.0)
+plane = pcr.ransac_plane(clean, distance_threshold=0.02, iterations=1000)
+obstacles = clean.select_inverse(plane.inliers)
+clusters = pcr.euclidean_cluster(obstacles, distance_threshold=0.5,
+                                 min_size=10, max_size=25000)
 
-# Passthrough filter
-filtered = pcr.passthrough_filter(cloud, "z", 0.2, 0.8)
-
-# Estimate normals
-with_normals = pcr.estimate_normals(cloud, k=15)
-
-# RANSAC plane fitting
-result = pcr.ransac_plane(cloud, distance_threshold=0.01, iterations=1000)
-print(f"Plane normal: {result.normal}, inliers: {len(result.inliers)}")
-
-# ICP registration
-source = pcr.PointCloud.from_numpy(np.random.rand(1000, 3).astype(np.float32))
-target = pcr.PointCloud.from_numpy(np.random.rand(1000, 3).astype(np.float32))
-icp = pcr.icp_point_to_point(source, target, max_iterations=50)
-print(f"ICP converged: {icp.converged}, RMSE: {icp.rmse:.6f}")
-
-# Euclidean clustering
-clusters = pcr.euclidean_cluster(cloud, distance_threshold=0.05, min_size=10, max_size=10000)
-
-# File I/O
-pcr.write_pcd("output.pcd", cloud)
-pcr.write_ply("output.ply", cloud)
-loaded = pcr.read_pcd("output.pcd")
+for i, c in enumerate(clusters):
+    print(f"Cluster {i}: {len(c)} points")
 ```
 
-## Quickstart (Rust)
+### Rust
+
+```bash
+cargo add pointclouds-core pointclouds-filters pointclouds-segmentation
+```
 
 ```rust
 use pointclouds_core::PointCloud;
 use pointclouds_filters::voxel_downsample;
-use pointclouds_normals::estimate_normals;
-use pointclouds_registration::{icp_point_to_point, IcpParams};
-use pointclouds_segmentation::ransac_plane;
-use pointclouds_io::{read_pcd, write_pcd};
+use pointclouds_segmentation::{ransac_plane, euclidean_cluster};
 
-// Create a point cloud
-let cloud = PointCloud::from_xyz(
-    vec![0.0, 1.0, 2.0],
-    vec![0.0, 0.0, 0.0],
-    vec![0.0, 0.0, 0.0],
-);
-
-// Voxel downsample
+let cloud = PointCloud::from_xyz(x_vec, y_vec, z_vec);
 let ds = voxel_downsample(&cloud, 0.5);
-
-// Estimate normals
-let normals = estimate_normals(&cloud, 10);
-
-// ICP registration
-let result = icp_point_to_point(&source, &target, &IcpParams::default());
-
-// RANSAC plane
-let (model, inliers) = ransac_plane(&cloud, 0.01, 1000);
-
-// I/O
-write_pcd("output.pcd", &cloud).unwrap();
-let loaded = read_pcd("output.pcd").unwrap();
+let (plane, inliers) = ransac_plane(&ds, 0.02, 1000);
+let obstacles = ds.select_inverse(&inliers);
+let clusters = euclidean_cluster(&obstacles, 0.5, 10, 25000);
 ```
 
-## Crates
+## What's included
 
-| Crate | Description |
-|-------|-------------|
-| `pointclouds-core` | SoA `PointCloud`, `CloudView`, `Aabb`, point types |
-| `pointclouds-spatial` | KD-tree (kiddo-backed, O(log n) queries) |
-| `pointclouds-filters` | Voxel downsample, passthrough, statistical/radius outlier removal |
-| `pointclouds-normals` | PCA-based normal estimation via SVD |
-| `pointclouds-registration` | Point-to-point ICP, rigid transforms, correspondences |
-| `pointclouds-segmentation` | Euclidean clustering, RANSAC plane fitting |
-| `pointclouds-io` | PCD (ASCII + binary), PLY (ASCII), LAS file I/O |
-| `pointclouds-python` | PyO3 + maturin Python bindings |
+**Filters**: voxel downsample, passthrough (axis range), statistical outlier removal,
+radius outlier removal.
 
-## Building
+**Normals**: PCA-based estimation (rayon-parallel, analytical 3x3 eigensolver via
+Cardano's formula). Viewpoint-oriented.
+
+**Registration**: point-to-point ICP, point-to-plane ICP, rigid transform
+composition and application.
+
+**Segmentation**: RANSAC plane fitting (with deterministic seeded variant),
+Euclidean clustering via grid spatial hashing + union-find with rayon-parallel
+pair generation.
+
+**I/O**: PCD (ASCII + binary), PLY (ASCII + binary), LAS read. All formats
+preserve normals and colors where applicable.
+
+**Spatial**: KD-tree (kiddo v5) with KNN and radius search.
+
+## Building from source
 
 ```bash
-# Rust
+# Run tests
 cargo test --workspace
-cargo bench --workspace
 
-# Python
-cd crates/python
-maturin develop --release
-pytest ../../tests/test_python.py -v
+# Build Python wheel (release mode)
+pip install maturin
+maturin develop --release --manifest-path crates/python/Cargo.toml
+pytest tests/test_python.py
+
+# Run the demo pipelines (no data files needed, they generate synthetic scenes)
+python examples/python/kitti_obstacle_detection.py
+python examples/python/aerial_lidar.py --quick
 ```
 
-## Performance
+## Current limits
 
-Target: **>=3x faster than Open3D** on 1M-point workloads.
-
-Run benchmarks:
-```bash
-cargo bench --workspace
-```
-
-See [BENCHMARKS.md](BENCHMARKS.md) for detailed results.
+- SOR is the bottleneck in most pipelines (O(n * k * log n) from per-point KNN).
+  A grid-based approach would help but isn't implemented yet.
+- ICP doesn't scale past ~10K points without subsampling — correspondence search
+  is O(n log n) per iteration.
+- No explicit SIMD intrinsics yet. The SoA layout is ready for it but the compiler
+  is doing the vectorization for now.
+- Clustering pair generation can blow up with very small radius relative to point
+  density (cells get dense, O(n * k) pairs where k is cell occupancy).
 
 ## License
 
-Dual-licensed under either:
-
-- MIT license (`LICENSE-MIT`)
-- Apache License, Version 2.0 (`LICENSE-APACHE`)
-
-at your option.
+MIT or Apache-2.0, at your option.

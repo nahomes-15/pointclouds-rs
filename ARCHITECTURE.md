@@ -67,7 +67,7 @@ All internal computation uses `f32`:
 
 ## Spatial Indexing
 
-The `KdTree` wraps the `kiddo` crate (v4) for O(log n) spatial queries:
+The `KdTree` wraps the `kiddo` crate (v5) for O(log n) spatial queries:
 - `knn(query, k)` — k-nearest neighbors with Euclidean distances
 - `radius_search(query, radius)` — all points within radius
 - Owns data (no lifetime ties to source cloud)
@@ -96,11 +96,12 @@ Random sample consensus with seeded RNG:
 4. Deterministic variant via `ransac_plane_seeded()`
 
 ### Euclidean Clustering
-BFS-based connected component extraction:
-1. Build KdTree
-2. BFS from unvisited points using radius search
-3. Filter clusters by min/max size
-4. Sort by size (largest first)
+Grid-based spatial hashing + union-find:
+1. Hash points into cells of side length = distance_threshold
+2. For each cell, compare against 14 forward half-neighbors (avoids duplicate pairs)
+3. Union-find with path splitting + union by rank merges connected points
+4. Rayon-parallel candidate pair generation per cell
+5. Filter clusters by min/max size, sort by size (largest first)
 
 ## Safety
 
@@ -122,5 +123,6 @@ BFS-based connected component extraction:
 - Unit tests in each module with `#[cfg(test)]`
 - Property-based tests via `proptest` (roundtrip invariants, output bounds)
 - Integration tests in `tests/` (pipeline, I/O roundtrip)
-- Python tests via `pytest` (15 tests covering all bindings)
+- Differential correctness tests (brute-force reference vs optimized)
+- Python tests via `pytest` (36 tests covering all bindings)
 - Criterion benchmarks for performance regression detection
