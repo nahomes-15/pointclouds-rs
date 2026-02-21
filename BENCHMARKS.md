@@ -1,123 +1,153 @@
 # Benchmarks
 
-All benchmarks use [Criterion.rs](https://github.com/bheisler/criterion.rs) with 100
-samples per measurement. Run on macOS arm64 (Apple Silicon), Rust 1.92.0, release profile.
+## Environment
 
-## Running
+- **CPU**: Apple M4 Max (arm64)
+- **RAM**: 36 GB
+- **OS**: macOS 15.5 (Darwin 24.6.0)
+- **Rust**: 1.92.0 (release profile, LTO)
+- **Python**: 3.14.2 (for pipeline benchmarks)
+- **Benchmark tool**: [Criterion.rs](https://github.com/bheisler/criterion.rs), 100 samples per measurement
+
+## Reproducing
 
 ```bash
-# All benchmarks
-cargo bench --workspace
+# All Criterion benchmarks (Rust-only, no Python needed)
+cargo bench -p pointclouds-benches
 
-# Individual benchmarks
+# Individual suites
 cargo bench -p pointclouds-benches --bench bench_voxel
 cargo bench -p pointclouds-benches --bench bench_kdtree
 cargo bench -p pointclouds-benches --bench bench_normals
 cargo bench -p pointclouds-benches --bench bench_icp
 cargo bench -p pointclouds-benches --bench bench_filters
+
+# End-to-end pipeline benchmarks (Python, requires release wheel)
+maturin develop --release --manifest-path crates/python/Cargo.toml
+python examples/python/kitti_obstacle_detection.py
+python examples/python/aerial_lidar.py --quick
 ```
 
-## Results
+## Criterion results
+
+All numbers are wall-clock median from 100 Criterion samples.
 
 ### Voxel Downsample
 
-| Points | Mean | Notes |
-|--------|------|-------|
-| 10K | 58.6 us | |
-| 100K | 671.0 us | |
-| 1M | 7.57 ms | ~132K points/ms |
+| Points | Time |
+|--------|------|
+| 10K | 61 us |
+| 100K | 703 us |
+| 1M | 8.3 ms |
 
-### KD-Tree Queries (per query)
+### KD-Tree queries (per query, tree already built)
 
-| Points in tree | KNN (k=10) | Radius Search |
+| Points in tree | KNN (k=10) | Radius search |
 |---------------|-----------|---------------|
-| 100K | 303.5 ns | 71.6 ns |
-| 1M | 348.1 ns | 88.5 ns |
+| 100K | 1.47 us | 235 ns |
+| 1M | 2.13 us | 419 ns |
 
-KD-Tree query times scale logarithmically — going from 100K to 1M points (10x)
-increases query time by only ~15%.
+### Normal estimation (PCA, k=10, rayon-parallel)
 
-### Normal Estimation (PCA, k=10)
-
-| Points | Mean |
+| Points | Time |
 |--------|------|
-| 10K | 11.3 ms |
-| 100K | 125.9 ms |
+| 10K | 1.4 ms |
+| 100K | 15.8 ms |
 
-### ICP Point-to-Point (max 50 iterations)
+### ICP point-to-point (max 50 iterations)
 
-| Points | Mean |
+| Points | Time |
 |--------|------|
-| 1K | 393.2 us |
-| 10K | 4.98 ms |
+| 1K | 466 us |
+| 10K | 5.15 ms |
 
-### Passthrough Filter
+### Passthrough filter
 
-| Points | Mean |
+| Points | Time |
 |--------|------|
-| 100K | 354.4 us |
-| 1M | 5.13 ms |
+| 100K | 372 us |
+| 1M | 5.5 ms |
 
-### Statistical Outlier Removal (k=10)
+### Statistical outlier removal (k=10)
 
-| Points | Mean |
+| Points | Time |
 |--------|------|
-| 10K | 8.80 ms |
-| 100K | 106.5 ms |
+| 10K | 11.2 ms |
+| 100K | 128 ms |
 
-### Radius Outlier Removal
+### Radius outlier removal
 
-| Points | Mean |
+| Points | Time |
 |--------|------|
-| 10K | 1.43 ms |
-| 100K | 22.75 ms |
+| 10K | 1.35 ms |
+| 100K | 19.1 ms |
 
-## Summary Table
+## Euclidean clustering
 
-| Algorithm | 1K | 10K | 100K | 1M |
-|-----------|-----|------|-------|------|
-| Voxel Downsample | -- | 58.6 us | 671 us | 7.57 ms |
-| KD-Tree KNN k=10 (per query) | -- | -- | 304 ns | 348 ns |
-| KD-Tree Radius (per query) | -- | -- | 71.6 ns | 88.5 ns |
-| Normal Estimation k=10 | -- | 11.3 ms | 126 ms | -- |
-| ICP Point-to-Point | 393 us | 4.98 ms | -- | -- |
-| Passthrough Filter | -- | -- | 354 us | 5.13 ms |
-| Statistical Outlier k=10 | -- | 8.80 ms | 107 ms | -- |
-| Radius Outlier Removal | -- | 1.43 ms | 22.8 ms | -- |
+Uses grid-based spatial hashing + union-find (not KD-tree BFS). Rayon-parallel
+candidate pair generation. Measured via `examples/python/aerial_lidar.py --quick`:
 
-## Open3D Comparison
+| Points | Radius | Time | Algorithm |
+|--------|--------|------|-----------|
+| 161K non-ground | 2.0m | 16 ms | grid + union-find |
 
-Run the comparison script:
+## Summary table
 
-```bash
-python3.12 -m venv .venv312
-source .venv312/bin/activate
-pip install open3d numpy maturin
-maturin develop --release --manifest-path crates/python/Cargo.toml
-python tests/bench_vs_open3d.py
+| Algorithm | 10K | 100K | 1M |
+|-----------|-----|------|-----|
+| Voxel downsample | 61 us | 703 us | 8.3 ms |
+| KD-tree KNN k=10 (per query) | -- | 1.47 us | 2.13 us |
+| KD-tree radius (per query) | -- | 235 ns | 419 ns |
+| Normal estimation k=10 | 1.4 ms | 15.8 ms | -- |
+| ICP point-to-point | 466 us (1K) | 5.15 ms | -- |
+| Passthrough filter | -- | 372 us | 5.5 ms |
+| SOR k=10 | 11.2 ms | 128 ms | -- |
+| Radius outlier removal | 1.35 ms | 19.1 ms | -- |
+
+## End-to-end pipeline benchmarks
+
+These run from Python using the release wheel (`maturin develop --release`).
+
+### KITTI obstacle detection (68K points)
+
+```
+Raw input:            68,000 points
+After downsample:     58,053 points  (    3.9 ms)
+After SOR:            56,819 points  (  153.0 ms)
+Ground inliers:       52,424 points  (    2.1 ms)
+Obstacle points:       4,395 points
+Clusters found:            3          (    2.9 ms)
+Total pipeline time:    162 ms
 ```
 
-### Results (macOS arm64, Apple Silicon, Python 3.12, Open3D 0.19)
+### Aerial LiDAR (241K points, --quick mode)
 
-| Algorithm | 100K Open3D | 100K pcr | Speedup | 1M Open3D | 1M pcr | Speedup |
-|-----------|------------|---------|---------|----------|--------|---------|
-| Voxel Downsample | 9.85 ms | 5.47 ms | **1.8x** | 264 ms | 54.7 ms | **4.8x** |
-| Passthrough Filter | 5.31 ms | 0.34 ms | **15.5x** | 54.3 ms | 5.01 ms | **10.8x** |
-| Normal Estimation k=15 | 49.7 ms | 19.7 ms | **2.5x** | 715 ms | 280 ms | **2.6x** |
-| RANSAC Plane (1000 iter) | 9.23 ms | 2.93 ms | **3.1x** | 83.2 ms | 27.2 ms | **3.1x** |
+```
+Voxel downsample (0.5m)      208,090       13.2 ms
+Estimate normals (k=15)      208,090       54.8 ms
+RANSAC ground plane           45,346        2.3 ms
+Non-ground points            162,744
+Euclidean clustering              21       16.4 ms
+Total pipeline time:      87 ms
+Throughput:           2,783,172 pts/sec
+```
 
-**Average speedup: 5.5x** across all algorithms and sizes.
+## Current limits
 
-At 1M points (the target scale):
-- Voxel Downsample: **4.8x** faster
-- Passthrough Filter: **10.8x** faster
-- RANSAC Plane: **3.1x** faster
-- Normal Estimation: **2.6x** (bounded by KdTree query speed — kiddo vs FLANN)
-
-### Optimizations applied
-
-- **Normal estimation**: Rayon-parallelized per-point computation + analytical 3x3
-  eigensolver (Cardano's formula) replacing nalgebra's general iterative solver.
-  Improved from 0.3x to 2.5x vs Open3D.
-- **RANSAC**: Rayon-parallelized iteration batches + pre-extracted contiguous point
-  array + adaptive early termination. Improved from 0.4x to 3.1x vs Open3D.
+- **SOR dominates small pipelines**: Statistical outlier removal accounts for ~95% of
+  the KITTI pipeline time (153 ms of 162 ms). It uses per-point KNN which is inherently
+  O(n * k * log n). Replacing with a grid-based approach would help but is not yet done.
+- **Normal estimation at 1M+**: Not yet benchmarked at 1M points. At 100K it takes 16 ms
+  (rayon-parallel), but scaling behavior above 500K is untested.
+- **ICP scales quadratically with correspondence search**: Point-to-point ICP at 10K
+  takes 5.1 ms. At 100K+ it would be slow without subsampling or correspondence caching.
+- **No SIMD**: SoA layout is SIMD-friendly but no explicit SIMD intrinsics are used yet.
+  The compiler auto-vectorizes some loops but there is room for improvement.
+- **Clustering edge explosion**: The grid + union-find clustering generates O(n * k)
+  candidate pairs where k is the average cell occupancy. With very small radius relative
+  to point density, cells become dense and pair generation dominates. Works well for
+  typical LiDAR densities.
+- **Single-threaded ICP**: ICP iterations are sequential (each depends on the previous).
+  Only the KD-tree queries within each iteration are parallelizable.
+- **No Open3D comparison data in CI**: The Open3D comparison numbers in earlier versions
+  were measured manually. Automated comparison is not part of the test suite.

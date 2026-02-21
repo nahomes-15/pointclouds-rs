@@ -2,49 +2,145 @@ name: Wheels
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
-  build-wheels:
+  # ───────────────── Build wheels ─────────────────
+
+  linux:
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
+        platform:
+          - runner: ubuntu-latest
             target: x86_64
-          - os: macos-13
-            target: x86_64
-          - os: macos-14
+          - runner: ubuntu-latest
             target: aarch64
-          - os: windows-latest
-            target: x64
-    runs-on: ${{ matrix.os }}
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: pip install maturin
+          python-version: ${{ matrix.python-version }}
       - name: Build wheel
-        run: maturin build --release --manifest-path crates/python/Cargo.toml --out dist
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --manifest-path crates/python/Cargo.toml
+          manylinux: auto
+      - name: Test wheel
+        if: matrix.platform.target == 'x86_64'
+        run: |
+          pip install numpy pytest
+          pip install --force-reinstall dist/*.whl
+          pytest tests/test_python.py -v
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.target }}
+          name: wheels-linux-${{ matrix.platform.target }}-py${{ matrix.python-version }}
           path: dist/*.whl
 
+  macos:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
+          args: --release --out dist --manifest-path crates/python/Cargo.toml
+      - name: Test wheel
+        run: |
+          pip install numpy pytest
+          pip install --force-reinstall dist/*.whl
+          pytest tests/test_python.py -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}-py${{ matrix.python-version }}
+          path: dist/*.whl
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x64
+          args: --release --out dist --manifest-path crates/python/Cargo.toml
+      - name: Test wheel
+        run: |
+          pip install numpy pytest
+          pip install --force-reinstall (Get-ChildItem dist/*.whl)
+          pytest tests/test_python.py -v
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-x86_64-py${{ matrix.python-version }}
+          path: dist/*.whl
+
+  # ───────────────── Build sdist ─────────────────
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path crates/python/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # ───────────────── Publish to PyPI ─────────────────
+
   publish:
-    needs: build-wheels
+    needs: [linux, macos, windows, sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
       id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pointclouds-rs
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
           merge-multiple: true
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
