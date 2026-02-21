@@ -52,6 +52,32 @@ impl PyPointCloud {
         )?)
     }
 
+    pub fn select(&self, indices: Vec<usize>) -> PyResult<Self> {
+        if let Some(&bad) = indices.iter().find(|&&i| i >= self.inner.len()) {
+            return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+                "index {} out of bounds for cloud with {} points",
+                bad,
+                self.inner.len()
+            )));
+        }
+        Ok(Self {
+            inner: self.inner.select(&indices),
+        })
+    }
+
+    pub fn select_inverse(&self, indices: Vec<usize>) -> PyResult<Self> {
+        if let Some(&bad) = indices.iter().find(|&&i| i >= self.inner.len()) {
+            return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+                "index {} out of bounds for cloud with {} points",
+                bad,
+                self.inner.len()
+            )));
+        }
+        Ok(Self {
+            inner: self.inner.select_inverse(&indices),
+        })
+    }
+
     pub fn __len__(&self) -> usize {
         self.inner.len()
     }

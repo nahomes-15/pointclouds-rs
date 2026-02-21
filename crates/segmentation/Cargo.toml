@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 pointclouds-core = { path = "../core" }
 pointclouds-spatial = { path = "../spatial" }
+hashbrown.workspace = true
 rand.workspace = true
 rayon.workspace = true
 

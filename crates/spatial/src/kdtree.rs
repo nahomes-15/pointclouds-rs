@@ -133,6 +133,34 @@ impl KdTree {
 
         indices
     }
+
+    /// Find all points within `radius` of `query`, without sorting results.
+    ///
+    /// Same as [`radius_search`] but skips the final sort, making it faster
+    /// for internal algorithms (e.g., clustering) that don't need deterministic
+    /// output order.
+    pub fn radius_search_unsorted(&self, query: &[f32; 3], radius: f32) -> Vec<usize> {
+        if self.is_empty()
+            || radius <= 0.0
+            || !radius.is_finite()
+            || !query.iter().all(|v| v.is_finite())
+        {
+            return Vec::new();
+        }
+
+        let radius_sq = radius * radius;
+        let query_radius_sq = radius_sq + f32::EPSILON * radius_sq.max(1.0);
+
+        let results = self
+            .tree
+            .within_unsorted::<SquaredEuclidean>(query, query_radius_sq);
+
+        results
+            .into_iter()
+            .filter(|nn| nn.distance <= radius_sq)
+            .map(|nn| nn.item as usize)
+            .collect()
+    }
 }
 
 #[cfg(test)]
