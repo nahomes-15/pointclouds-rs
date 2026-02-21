@@ -1,0 +1,13 @@
+[package]
+name = "pointclouds-spatial"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pointclouds-core = { path = "../core" }
+kiddo.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

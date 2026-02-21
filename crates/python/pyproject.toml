@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pointclouds-rs"
+version = "0.1.0"
+description = "The Polars of Point Clouds"
+requires-python = ">=3.9"
+
+[tool.maturin]
+module-name = "pointclouds_rs"
+python-source = "python"
