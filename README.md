@@ -1,4 +1,6 @@
-# pointclouds-rs
+# pcrs
+
+<img src="outputs/kitti_demo/kitti_obstacle_detection.gif" alt="100 frames of real-time obstacle detection" width="100%">
 
 Rust library for 3D point cloud processing, with Python bindings via PyO3.
 
@@ -18,15 +20,16 @@ what it needs. The Python package exposes the full API as `pointclouds_rs`.
 Measured on Apple M4 Max, release build. These are real outputs from the included
 demo scripts, not synthetic microbenchmarks:
 
-**KITTI obstacle detection** — 68K synthetic LiDAR points through voxel downsample,
-statistical outlier removal, RANSAC ground plane, and Euclidean clustering:
-162 ms total, finds 2 cars and 1 pedestrian.
+**KITTI obstacle detection** — 122K real Velodyne LiDAR points through voxel
+downsample, statistical outlier removal, RANSAC ground plane, and Euclidean
+clustering: p50 latency 89.5 ms across 100 frames, ~96 clusters per frame.
 
 **Aerial LiDAR** — 241K points through voxel downsample, normal estimation,
 RANSAC ground extraction, and clustering: 87 ms total (~2.8M pts/sec throughput).
 
-SOR dominates the KITTI pipeline at 153 ms (per-point KNN is expensive). Clustering
-uses grid spatial hashing + union-find and runs in 17 ms on 161K non-ground points.
+SOR dominates at ~84 ms (per-point KNN is expensive). Everything else — voxel
+downsample, RANSAC, clustering — totals under 9 ms. Clustering uses grid spatial
+hashing + union-find.
 Full Criterion microbenchmark data is in [BENCHMARKS.md](BENCHMARKS.md).
 
 ## Usage
