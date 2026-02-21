@@ -1,0 +1,21 @@
+[package]
+name = "pointclouds-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "pointclouds_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pointclouds-core = { path = "../core" }
+pointclouds-spatial = { path = "../spatial" }
+pointclouds-filters = { path = "../filters" }
+pointclouds-normals = { path = "../normals" }
+pointclouds-registration = { path = "../registration" }
+pointclouds-segmentation = { path = "../segmentation" }
+pointclouds-io = { path = "../io" }
+pyo3 = { workspace = true, features = ["abi3-py39", "extension-module"] }
+numpy = { workspace = true }

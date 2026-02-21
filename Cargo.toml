@@ -1,0 +1,34 @@
+[workspace]
+members = [
+  "crates/core",
+  "crates/spatial",
+  "crates/filters",
+  "crates/normals",
+  "crates/registration",
+  "crates/segmentation",
+  "crates/io",
+  "crates/python",
+  "benches",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.79"
+license = "MIT OR Apache-2.0"
+authors = ["pointclouds-rs contributors"]
+repository = "https://github.com/your-org/pointclouds-rs"
+
+[workspace.dependencies]
+rayon = "1.10"
+nalgebra = "0.33"
+rand = "0.8"
+hashbrown = "0.15"
+proptest = "1.4"
+criterion = "0.5"
+approx = "0.5"
+kiddo = "5"
+las = "0.9"
+pyo3 = "0.22"
+numpy = "0.22"

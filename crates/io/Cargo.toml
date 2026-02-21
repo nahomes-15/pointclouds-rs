@@ -1,0 +1,14 @@
+[package]
+name = "pointclouds-io"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pointclouds-core = { path = "../core" }
+las.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = "3"

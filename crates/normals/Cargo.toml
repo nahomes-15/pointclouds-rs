@@ -1,0 +1,15 @@
+[package]
+name = "pointclouds-normals"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pointclouds-core = { path = "../core" }
+pointclouds-spatial = { path = "../spatial" }
+rayon.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+approx.workspace = true

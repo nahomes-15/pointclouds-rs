@@ -1,0 +1,17 @@
+[package]
+name = "pointclouds-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+parallel = ["dep:rayon"]
+
+[dependencies]
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest.workspace = true
+approx.workspace = true

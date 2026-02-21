@@ -1,0 +1,60 @@
+[package]
+name = "pointclouds-benches"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+criterion.workspace = true
+pointclouds-core = { path = "../crates/core" }
+pointclouds-filters = { path = "../crates/filters" }
+pointclouds-spatial = { path = "../crates/spatial" }
+pointclouds-normals = { path = "../crates/normals" }
+pointclouds-registration = { path = "../crates/registration" }
+pointclouds-segmentation = { path = "../crates/segmentation" }
+nalgebra = { workspace = true }
+pointclouds-io = { path = "../crates/io" }
+rand.workspace = true
+tempfile = "3"
+
+[[test]]
+name = "test_pipeline"
+path = "../tests/test_pipeline.rs"
+
+[[test]]
+name = "test_roundtrip_io"
+path = "../tests/test_roundtrip_io.rs"
+
+[[test]]
+name = "test_adversarial"
+path = "../tests/test_adversarial.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bench]]
+name = "bench_voxel"
+path = "bench_voxel.rs"
+harness = false
+
+[[bench]]
+name = "bench_kdtree"
+path = "bench_kdtree.rs"
+harness = false
+
+[[bench]]
+name = "bench_normals"
+path = "bench_normals.rs"
+harness = false
+
+[[bench]]
+name = "bench_icp"
+path = "bench_icp.rs"
+harness = false
+
+[[bench]]
+name = "bench_filters"
+path = "bench_filters.rs"
+harness = false
